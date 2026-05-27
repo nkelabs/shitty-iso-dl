@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import socket
+import ssl
 import sys
 import json
 import re
@@ -10,6 +11,25 @@ import urllib.error
 # Global socket timeout so a stalled mirror can't hang the bulk loop forever.
 # Applies to both connect and per-read operations on the underlying socket.
 socket.setdefaulttimeout(60)
+
+# CA bundle resolution.
+#
+# When this script runs as `python3 shitty-iso-dl-cli.py`, the OS-provided
+# CA store works fine. When it's frozen by PyInstaller (one-file binary or
+# AppImage), the OS store isn't bundled and `ssl.create_default_context()`
+# fails with CERTIFICATE_VERIFY_FAILED on every HTTPS request.
+#
+# Fix: use the `certifi` Mozilla CA bundle when it's installed. certifi is a
+# proper Python package, so PyInstaller picks it up when invoked with
+# `--collect-data certifi` (see .github/workflows/release.yml). For people
+# running the .py directly without certifi installed, we fall back to the
+# default context.
+try:
+    import certifi
+    _SSL_CTX = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _SSL_CTX = ssl.create_default_context()
+
 
 # Filenames here come from either scraped HTML (regex-matched) or the GitHub
 # API (attacker-controllable). Even though current regexes are tight, we
@@ -40,7 +60,10 @@ class _NoDowngradeRedirectHandler(urllib.request.HTTPRedirectHandler):
             )
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
-_opener = urllib.request.build_opener(_NoDowngradeRedirectHandler())
+_opener = urllib.request.build_opener(
+    urllib.request.HTTPSHandler(context=_SSL_CTX),
+    _NoDowngradeRedirectHandler(),
+)
 _opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
 urllib.request.install_opener(_opener)
 
