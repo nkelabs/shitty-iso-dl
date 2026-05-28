@@ -131,7 +131,7 @@ class ScraperEngine:
     # Caveat: the SHA file is usually hosted next to the ISO on the same mirror,
     # so this catches transport corruption but not a compromised mirror. Real
     # protection needs GPG-signed checksum files (per-distro work, not yet done).
-    _SHA_CANDIDATES = ("SHA256SUMS", "sha256sums.txt", "sha256sum.txt", "SHA256")
+    _SHA_CANDIDATES = ("SHA256SUMS", "sha256sums", "sha256sums.txt", "SHA256SUMS.txt", "sha256sum.txt", "SHA256SUM.txt", "sha256", "SHA256")
 
     @staticmethod
     def _parse_sha256_for(text, iso_filename):
