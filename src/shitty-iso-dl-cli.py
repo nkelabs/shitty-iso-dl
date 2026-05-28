@@ -395,7 +395,7 @@ def _natural_key(s):
 # transport corruption and the most casual tampering. Real protection needs
 # GPG-signed checksum files, which is per-distro work and not yet implemented.
 # ---------------------------------------------------------
-_SHA_CANDIDATES = ("SHA256SUMS", "sha256sums.txt", "sha256sum.txt", "SHA256")
+_SHA_CANDIDATES = ("SHA256SUMS", "sha256sums", "sha256sums.txt", "SHA256SUMS.txt", "sha256sum.txt", "SHA256SUM.txt", "sha256", "SHA256")
 
 def _parse_sha256_for(text, iso_filename):
     # Accept the two common layouts:
@@ -446,36 +446,63 @@ def sha256_file(path):
 
 def find_latest_via_regex(config):
     base_url = config['base_url']
-    
-    # Step 1: If the ISOs are hidden inside a versioned folder (like Ubuntu/Fedora)
+
+    # Step 1: If the ISOs are hidden inside a versioned folder
     if 'dir_regex' in config:
-        html = get_html(base_url)
+        try:
+            html = get_html(base_url)
+        except Exception as e:
+            print(f"  [!] Error reading base directory {base_url}: {e}")
+            return None
+
         dirs = re.findall(config['dir_regex'], html)
         if not dirs:
             return None
+
         # Extract string if regex returns tuples, sort to find highest version
         dirs = [d[0] if isinstance(d, tuple) else d for d in dirs]
-        latest_dir = sorted(dirs, key=_natural_key)[-1]
-        
-        target_url = base_url + latest_dir + "/"
-        if 'sub_path' in config:
-            target_url += config['sub_path']
-    else:
-        target_url = base_url
+        sorted_dirs = sorted(dirs, key=_natural_key)
 
-    # Step 2: Scrape the actual ISO file from the target directory
-    try:
-        html = get_html(target_url)
-        files = re.findall(config['file_regex'], html)
-        if not files:
-            return None
-        files = [f[0] if isinstance(f, tuple) else f for f in files]
-        latest_file = sorted(files, key=_natural_key)[-1]
-        return target_url + latest_file
-    except Exception as e:
-        print(f"  [!] Error reading {target_url}: {e}")
+        # Try directories from newest to oldest (handles empty/half-synced staging folders)
+        for latest_dir in reversed(sorted_dirs):
+            target_url = base_url + latest_dir + "/"
+            if 'sub_path' in config:
+                target_url += config['sub_path']
+
+            try:
+                html = get_html(target_url)
+                files = re.findall(config['file_regex'], html)
+                if files:
+                    files = [f[0] if isinstance(f, tuple) else f for f in files]
+                    latest_file = sorted(files, key=_natural_key)[-1]
+                    iso_url = target_url + latest_file
+
+                    # Validate that the SHA file is ALSO present in this folder.
+                    # If it's missing, the mirror is incomplete. Fall back to the older folder.
+                    if fetch_expected_sha256(iso_url, latest_file):
+                        return iso_url
+                    else:
+                        continue
+            except Exception:
+                continue
+
+        print(f"  [!] Could not find any complete releases (ISO + SHA) in {base_url}")
         return None
 
+    else:
+        # Step 2 logic for direct directories (no sub-folders to fall back on)
+        target_url = base_url
+        try:
+            html = get_html(target_url)
+            files = re.findall(config['file_regex'], html)
+            if not files:
+                return None
+            files = [f[0] if isinstance(f, tuple) else f for f in files]
+            latest_file = sorted(files, key=_natural_key)[-1]
+            return target_url + latest_file
+        except Exception as e:
+            print(f"  [!] Error reading {target_url}: {e}")
+            return None
 def find_latest_github(repo):
     url = f"https://api.github.com/repos/{repo}/releases/latest"
     try:
