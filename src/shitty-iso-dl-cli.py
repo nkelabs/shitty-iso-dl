@@ -148,9 +148,9 @@ DISTROS = {
     },
     "Devuan": {
         "type": "regex",
-        "base_url": "https://mirrors.kernel.org/devuan/",
-        "dir_regex": r'href="(devuan_[0-9]+)/"',
-        "file_regex": r'href="(devuan_[0-9\.]+_amd64_desktop\.iso)"',
+        "base_url": "https://mirrors.dotsrc.org/devuan-cd/",
+        "dir_regex": r'href="(devuan_(?!jessie)[a-z]+)/"',
+        "file_regex": r'href="(devuan_[a-z]+_[0-9\.]+_amd64_desktop\.iso)"',
         "sub_path": "installer-iso/"
     },
     "Antix": {
